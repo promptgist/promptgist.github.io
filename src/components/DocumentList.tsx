@@ -13,13 +13,16 @@ interface DocumentItem {
 }
 
 const DocumentList: React.FC = () => {
-    const { user, loading, login, loginWithEmail, logout } = useAuth();
+    const { user, loading } = useAuth();
     const router = useRouter();
     const [docs, setDocs] = useState<DocumentItem[]>([]);
 
     useEffect(() => {
         if (loading) return;
-        if (!user) return;
+        if (!user) {
+            setDocs([]);
+            return;
+        }
         const fetchDocs = async () => {
             const docsRef = collection(db, 'documents');
             const q = query(docsRef, where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc'));
@@ -48,50 +51,40 @@ const DocumentList: React.FC = () => {
             createdAt: new Date(),
             updatedAt: new Date(),
         });
-        router.push(`/?docId=${docRef.id}`);
+        // Force hard navigation to ensure state resets and header loads
+        window.location.href = `/?docId=${docRef.id}`;
     };
 
-    if (loading) return <p>Loading…</p>;
-
-    if (!user) {
-        return (
-            <div className="p-2 space-y-2">
-                <p className="text-sm font-medium">Please sign in</p>
-                <button onClick={login} className="w-full bg-white border border-gray-300 text-gray-700 px-2 py-1 rounded text-sm hover:bg-gray-50">
-                    Sign in with Google
-                </button>
-                <div className="border-t pt-2 mt-2">
-                    <p className="text-xs text-gray-500 mb-1">Test Login</p>
-                    <button
-                        onClick={() => loginWithEmail('admin@stanchen.ca', 'password')}
-                        className="w-full bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-                    >
-                        Login as Admin
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    if (loading) return <div className="p-4 text-sm text-gray-500">Loading...</div>;
+    if (!user) return <div className="p-4 text-sm text-gray-500">Sign in to view documents</div>;
 
     return (
-        <div>
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">My Prompts</h2>
-                <div className="flex gap-1">
-                    <button onClick={createDoc} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">
-                        New
-                    </button>
-                    <button onClick={logout} className="bg-gray-200 text-gray-600 px-2 py-1 rounded text-sm">
-                        Logout
-                    </button>
-                </div>
+        <div className="flex flex-col h-full">
+            <div className="p-4 pb-2 flex justify-between items-center">
+                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">My Prompts</h2>
+                <button
+                    onClick={createDoc}
+                    className="text-gray-500 hover:text-blue-600 transition-colors"
+                    title="Create New Document"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                </button>
             </div>
-            <ul className="space-y-2">
+            <ul className="flex-1 overflow-y-auto px-2 space-y-0.5">
                 {docs.map((doc) => (
-                    <li key={doc.id} className="cursor-pointer hover:bg-gray-100 p-1 rounded" onClick={() => openDoc(doc.id)}>
+                    <li
+                        key={doc.id}
+                        className="cursor-pointer hover:bg-gray-200 px-3 py-2 rounded-md text-sm text-gray-700 truncate transition-colors"
+                        onClick={() => openDoc(doc.id)}
+                    >
                         {doc.title}
                     </li>
                 ))}
+                {docs.length === 0 && (
+                    <li className="px-3 py-2 text-sm text-gray-400 italic">No documents yet</li>
+                )}
             </ul>
         </div>
     );

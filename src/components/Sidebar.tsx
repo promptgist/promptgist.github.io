@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import DocumentList from './DocumentList';
+import UserProfile from './UserProfile';
 
 const Sidebar = () => {
     const [isOpen, setIsOpen] = useState(true);
@@ -19,16 +20,17 @@ const Sidebar = () => {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden">
                 {isOpen ? (
                     <DocumentList />
                 ) : (
                     <div className="flex flex-col items-center gap-4 mt-2">
-                        {/* Icons for collapsed state could go here */}
-                        <span className="text-xs text-gray-400">📁</span>
+                        <span className="text-xl" title="Documents">📁</span>
                     </div>
                 )}
             </div>
+
+            {isOpen && <UserProfile />}
         </div>
     );
 };
