@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, orderBy, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 
@@ -16,19 +16,7 @@ const DocumentList: React.FC = () => {
     const { user, loading } = useAuth();
     const router = useRouter();
     const [docs, setDocs] = useState<DocumentItem[]>([]);
-
-    const fetchDocs = React.useCallback(async () => {
-        if (!user) return;
-        const docsRef = collection(db, 'documents');
-        const q = query(docsRef, where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc'));
-        const snapshot = await getDocs(q);
-        const list: DocumentItem[] = [];
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            list.push({ id: docSnap.id, title: data.title || 'Untitled', updatedAt: data.updatedAt });
-        });
-        setDocs(list);
-    }, [user]);
+    const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
     useEffect(() => {
         if (loading) return;
@@ -36,8 +24,21 @@ const DocumentList: React.FC = () => {
             setDocs([]);
             return;
         }
-        fetchDocs();
-    }, [user, loading, fetchDocs]);
+
+        const docsRef = collection(db, 'documents');
+        const q = query(docsRef, where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list: DocumentItem[] = [];
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data() as any;
+                list.push({ id: docSnap.id, title: data.title || 'Untitled', updatedAt: data.updatedAt });
+            });
+            setDocs(list);
+        });
+
+        return () => unsubscribe();
+    }, [user, loading]);
 
     const openDoc = (id: string) => {
         router.push(`/?docId=${id}`);
@@ -74,6 +75,27 @@ const DocumentList: React.FC = () => {
         });
     };
 
+    const confirmDelete = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        setDeletingDocId(id);
+    };
+
+    const handleDelete = async () => {
+        if (!deletingDocId) return;
+        try {
+            await deleteDoc(doc(db, 'documents', deletingDocId));
+            // If the deleted doc was active, redirect to home
+            const currentDocId = new URLSearchParams(window.location.search).get('docId');
+            if (currentDocId === deletingDocId) {
+                router.push('/');
+            }
+        } catch (error) {
+            console.error("Error deleting document:", error);
+        } finally {
+            setDeletingDocId(null);
+        }
+    };
+
     if (loading) return <div className="p-4 text-sm text-gray-500">Loading...</div>;
     if (!user) return <div className="p-4 text-sm text-gray-500">Sign in to view documents</div>;
 
@@ -95,17 +117,55 @@ const DocumentList: React.FC = () => {
                 {docs.map((doc) => (
                     <li
                         key={doc.id}
-                        className="cursor-pointer hover:bg-gray-200 px-3 py-2 rounded-md text-sm text-gray-700 truncate transition-colors"
+                        className="group cursor-pointer hover:bg-gray-200 px-3 py-2 rounded-md text-sm text-gray-700 transition-colors flex justify-between items-center"
                         onClick={() => openDoc(doc.id)}
                     >
-                        {doc.title}
+                        <span className="truncate flex-1">{doc.title}</span>
+                        <button
+                            onClick={(e) => confirmDelete(e, doc.id)}
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 p-1 rounded transition-all"
+                            title="Delete"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
                     </li>
                 ))}
                 {docs.length === 0 && (
                     <li className="px-3 py-2 text-sm text-gray-400 italic">No documents yet</li>
                 )}
             </ul>
-        </div>
+
+
+            {/* Delete Confirmation Modal */}
+            {
+                deletingDocId && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 w-80 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Document?</h3>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Are you sure you want to delete this document? This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setDeletingDocId(null)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };
 
