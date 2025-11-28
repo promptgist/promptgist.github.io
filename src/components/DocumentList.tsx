@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, orderBy, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 
@@ -17,25 +17,27 @@ const DocumentList: React.FC = () => {
     const router = useRouter();
     const [docs, setDocs] = useState<DocumentItem[]>([]);
 
+    const fetchDocs = React.useCallback(async () => {
+        if (!user) return;
+        const docsRef = collection(db, 'documents');
+        const q = query(docsRef, where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const list: DocumentItem[] = [];
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            list.push({ id: docSnap.id, title: data.title || 'Untitled', updatedAt: data.updatedAt });
+        });
+        setDocs(list);
+    }, [user]);
+
     useEffect(() => {
         if (loading) return;
         if (!user) {
             setDocs([]);
             return;
         }
-        const fetchDocs = async () => {
-            const docsRef = collection(db, 'documents');
-            const q = query(docsRef, where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc'));
-            const snapshot = await getDocs(q);
-            const list: DocumentItem[] = [];
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data() as any;
-                list.push({ id: docSnap.id, title: data.title || 'Untitled', updatedAt: data.updatedAt });
-            });
-            setDocs(list);
-        };
         fetchDocs();
-    }, [user, loading]);
+    }, [user, loading, fetchDocs]);
 
     const openDoc = (id: string) => {
         router.push(`/?docId=${id}`);
@@ -43,16 +45,33 @@ const DocumentList: React.FC = () => {
 
     const createDoc = async () => {
         if (!user) return;
-        const newDocRef = collection(db, 'documents');
-        const docRef = await addDoc(newDocRef, {
+
+        // Generate ID locally for immediate UI update
+        const newDocRef = doc(collection(db, 'documents'));
+        const newDocId = newDocRef.id;
+        const newDocData = {
             ownerId: user.uid,
             title: 'New Prompt',
             content: '<p></p>',
             createdAt: new Date(),
             updatedAt: new Date(),
+        };
+
+        // Optimistic UI update
+        const newDocItem: DocumentItem = {
+            id: newDocId,
+            title: newDocData.title,
+            updatedAt: newDocData.updatedAt
+        };
+        setDocs(prev => [newDocItem, ...prev]);
+
+        // Navigate immediately
+        router.push(`/?docId=${newDocId}`);
+
+        // Persist in background
+        setDoc(newDocRef, newDocData).catch(error => {
+            console.error("Error creating document:", error);
         });
-        // Force hard navigation to ensure state resets and header loads
-        window.location.href = `/?docId=${docRef.id}`;
     };
 
     if (loading) return <div className="p-4 text-sm text-gray-500">Loading...</div>;

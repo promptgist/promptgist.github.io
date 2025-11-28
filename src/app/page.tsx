@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useState, Suspense } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const VersionControl = dynamic(() => import('@/components/VersionControl'), { ssr: false });
@@ -14,6 +15,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const docId = searchParams?.get('docId') ?? undefined;
   const [showHistory, setShowHistory] = useState(false);
+  const { user } = useAuth();
 
   const handleAddComment = (text: string) => {
     console.log('Comment on:', text);
@@ -30,7 +32,7 @@ function HomeContent() {
         )}
         <div className="flex-1 overflow-auto flex justify-center">
           <div className="w-full max-w-4xl bg-white min-h-full shadow-sm my-4 mx-8">
-            <Editor docId={docId} onAddComment={handleAddComment} />
+            <Editor key={docId} docId={docId} currentUser={user} onAddComment={handleAddComment} />
           </div>
         </div>
       </div>
